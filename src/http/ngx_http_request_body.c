@@ -305,6 +305,9 @@ ngx_http_do_read_client_request_body(ngx_http_request_t *r)
                         return NGX_AGAIN;
                     }
 
+                    ngx_log_error(NGX_LOG_ALERT, c->log, 0,
+                                  "busy buffers after request body flush");
+
                     return NGX_HTTP_INTERNAL_SERVER_ERROR;
                 }
 
@@ -674,6 +677,7 @@ ngx_http_discarded_request_body_handler(ngx_http_request_t *r)
     if (rc == NGX_OK) {
         r->discard_body = 0;
         r->lingering_close = 0;
+        r->lingering_time = 0;
         ngx_http_finalize_request(r, NGX_DONE);
         return;
     }
