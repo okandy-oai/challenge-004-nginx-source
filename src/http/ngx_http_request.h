@@ -192,6 +192,7 @@ typedef struct {
     ngx_table_elt_t                  *user_agent;
     ngx_table_elt_t                  *prefer;
     ngx_table_elt_t                  *referer;
+    ngx_table_elt_t                  *from;
     ngx_table_elt_t                  *content_length;
     ngx_table_elt_t                  *content_range;
     ngx_table_elt_t                  *content_type;

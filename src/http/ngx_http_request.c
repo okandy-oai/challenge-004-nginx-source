@@ -28,6 +28,8 @@ static ngx_int_t ngx_http_process_unique_header_line(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_host(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
+static ngx_int_t ngx_http_process_from(ngx_http_request_t *r,
+    ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_prefer(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_connection(ngx_http_request_t *r,
@@ -36,6 +38,8 @@ static ngx_int_t ngx_http_process_user_agent(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 
 static ngx_int_t ngx_http_validate_host(ngx_str_t *host, ngx_pool_t *pool,
+    ngx_uint_t alloc);
+static ngx_int_t ngx_http_validate_from(ngx_str_t *from, ngx_pool_t *pool,
     ngx_uint_t alloc);
 static ngx_int_t ngx_http_set_virtual_server(ngx_http_request_t *r,
     ngx_str_t *host);
@@ -148,6 +152,10 @@ ngx_http_header_t  ngx_http_headers_in[] = {
     { ngx_string("Expect"),
                  offsetof(ngx_http_headers_in_t, expect),
                  ngx_http_process_unique_header_line },
+
+    { ngx_string("From"),
+                 offsetof(ngx_http_headers_in_t, from),
+                 ngx_http_process_from },
 
     { ngx_string("Upgrade"),
                  offsetof(ngx_http_headers_in_t, upgrade),
@@ -4023,6 +4031,144 @@ ngx_http_process_prefer(ngx_http_request_t *r, ngx_table_elt_t *h,
     p->value.data = h->value.data;
 
     r->headers_in.prefer = p;
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_validate_from(ngx_str_t *from, ngx_pool_t *pool, ngx_uint_t alloc)
+{
+    u_char  *f, *u, ch;
+    size_t   i;
+
+    enum {
+        sw_begin = 0,
+        sw_username,
+        sw_username_dot,
+        sw_domain,
+        sw_tld
+    } state;
+
+    f = from->data;
+
+    state = sw_begin;
+
+    if (alloc) {
+        u = ngx_palloc(pool, from->len);
+
+        if (u == NULL) {
+            return NGX_ERROR;
+        }
+    } else {
+        u = from->data;
+    }
+
+    for (i = 0; i < from->len; i++) {
+        ch = f[i];
+
+        switch (state) {
+
+        case sw_begin:
+            if (isalnum(ch) || ch == '-' || ch == '_') {
+                state = sw_username;
+            } else if (ch == '.') {
+                state = sw_username_dot;
+            } else {
+                return NGX_DECLINED;
+            }
+            *u++ = ch;
+            break;
+
+        case sw_username_dot:
+            if (isalnum(ch) || ch == '-' || ch == '_') {
+                *u++ = ch;
+                state = sw_username;
+            } else if (ch == '.') {
+                state = sw_username_dot;
+                u -= 2;
+                for ( ;; ) {
+                    if (*u == '.') {
+                        u++;
+                        break;
+                    }
+
+                    u--;
+                }
+            } else {
+                return NGX_DECLINED;
+            }
+            break;
+
+        case sw_username:
+            if (ch == '@') {
+                state = sw_domain;
+            } else if (ch == '.') {
+                state = sw_username_dot;
+            } else if (!isalnum(ch) && ch != '-' && ch != '_' && ch != '+') {
+                return NGX_DECLINED;
+            }
+            *u++ = ch;
+            break;
+
+        case sw_domain:
+            if (ch == '.') {
+                state = sw_tld;
+            } else if (!isalnum(ch) && ch != '-') {
+                return NGX_DECLINED;
+            }
+            *u++ = ch;
+            break;
+
+        case sw_tld:
+            if (!isalpha(ch)) {
+                return NGX_DECLINED;
+            }
+            *u++ = ch;
+            break;
+
+        default:
+
+            return NGX_DECLINED;
+        }
+    }
+
+    if (state == sw_tld) {
+        *u = '\0';
+
+        if (alloc) {
+            from->data = u;
+        }
+        return NGX_OK;
+    } else {
+        return NGX_DECLINED;
+    }
+}
+
+static ngx_int_t
+ngx_http_process_from(ngx_http_request_t *r, ngx_table_elt_t *h,
+    ngx_uint_t offset)
+{
+    ngx_str_t  from;
+
+    if (r->headers_in.from) {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                      "client sent duplicate from header: \"%V: %V\", "
+                      "previous value: \"%V: %V\"",
+                      &h->key, &h->value, &r->headers_in.from->key,
+                      &r->headers_in.from->value);
+        ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+        return NGX_ERROR;
+    }
+
+    r->headers_in.from = h;
+
+    from = h->value;
+
+    if (ngx_http_validate_from(&from, r->pool, 1) != NGX_OK) {
+        ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+        return NGX_ERROR;
+    }
 
     return NGX_OK;
 }
