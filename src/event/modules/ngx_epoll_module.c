@@ -910,7 +910,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
                     rev->connection_counter = c->number;
                     rev->connection_history = cycle->connection_history;
                 }
-
+                rev->cycle = cycle;
                 rev->handler(rev);
             }
         }

@@ -49,6 +49,13 @@ struct ngx_con_his_s {
 };
 
 
+struct ngx_host_specs_s {
+    ngx_str_t *host_cpu;
+    ngx_str_t *host_mem;
+    ngx_str_t *host_os;
+};
+
+
 struct ngx_cycle_s {
     void                  ****conf_ctx;
     ngx_pool_t               *pool;
@@ -61,6 +68,8 @@ struct ngx_cycle_s {
     ngx_connection_t        **files;
     ngx_connection_t         *free_connections;
     ngx_uint_t                free_connection_n;
+
+    ngx_host_specs_t         *host_specs;
 
     ngx_module_t            **modules;
     ngx_uint_t                modules_n;

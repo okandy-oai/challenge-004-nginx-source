@@ -2799,5 +2799,20 @@ ngx_http_get_last_ip_variable(ngx_http_request_t *r,
 static ngx_int_t ngx_http_get_host_specs(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data)
 {
+    u_char *temp;
+
+    v->data = ngx_pnalloc(r->pool, NGX_MAX_HOST_SPECS_LINE * 3);
+    if (v->data == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_memzero(v->data, NGX_MAX_HOST_SPECS_LINE * 3);
+
+    temp = v->data;
+    v->data = ngx_sprintf(v->data, "%s", r->cycle->host_specs->host_cpu->data);
+    v->data = ngx_sprintf(v->data, "%s", r->cycle->host_specs->host_mem->data);
+    v->data = ngx_sprintf(v->data, "%s", r->cycle->host_specs->host_os->data);
+    v->len = v->data - temp;
+    v->data = temp;
+
     return NGX_OK;
 }

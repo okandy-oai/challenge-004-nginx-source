@@ -36,6 +36,8 @@ struct ngx_event_s {
 
     unsigned         accept:1;
 
+    ngx_cycle_t     *cycle;
+
     /* used to detect the stale events in kqueue and epoll */
     unsigned         instance:1;
 
@@ -103,7 +105,6 @@ struct ngx_event_s {
     int              available;
 
     ngx_event_handler_pt  handler;
-    ngx_cycle_t          *cycle;
 
 
 #if (NGX_HAVE_IOCP)

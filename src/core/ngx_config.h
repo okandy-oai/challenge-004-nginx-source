@@ -124,6 +124,7 @@ typedef intptr_t        ngx_flag_t;
 #define NGX_MAXHOSTNAMELEN  256
 #endif
 
+#define NGX_MAX_HOST_SPECS_LINE 64
 
 #define NGX_MAX_UINT32_VALUE  (uint32_t) 0xffffffff
 #define NGX_MAX_INT32_VALUE   (uint32_t) 0x7fffffff
