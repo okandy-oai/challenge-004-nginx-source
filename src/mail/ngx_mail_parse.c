@@ -124,10 +124,8 @@ ngx_mail_pop3_parse_command(ngx_mail_session_t *s)
                 break;
             case CR:
                 state = sw_almost_done;
-                s->arg_end = p;
                 break;
             case LF:
-                s->arg_end = p;
                 goto done;
             default:
                 if (s->args.nelts <= 2) {
@@ -202,17 +200,6 @@ ngx_mail_pop3_parse_command(ngx_mail_session_t *s)
 done:
 
     s->buffer->pos = p + 1;
-
-    if (s->arg_start) {
-        arg = ngx_array_push(&s->args);
-        if (arg == NULL) {
-            return NGX_ERROR;
-        }
-        arg->len = s->arg_end - s->arg_start;
-        arg->data = s->arg_start;
-        s->arg_start = NULL;
-    }
-
     s->state = (s->command != NGX_POP3_AUTH) ? sw_start : sw_argument;
 
     return NGX_OK;
@@ -220,7 +207,6 @@ done:
 invalid:
 
     s->state = sw_invalid;
-    s->arg_start = NULL;
 
     /* skip invalid command till LF */
 
@@ -241,7 +227,7 @@ invalid:
 ngx_int_t
 ngx_mail_imap_parse_command(ngx_mail_session_t *s)
 {
-    u_char      ch, *p, *c;
+    u_char      ch, *p, *c, *dst, *src, *end;
     ngx_str_t  *arg;
     enum {
         sw_start = 0,
@@ -279,6 +265,17 @@ ngx_mail_imap_parse_command(ngx_mail_session_t *s)
             case LF:
                 s->state = sw_start;
                 return NGX_MAIL_PARSE_INVALID_COMMAND;
+            default:
+                if ((ch < 'A' || ch > 'Z') && (ch < 'a' || ch > 'z')
+                    && (ch < '0' || ch > '9') && ch != '-' && ch != '.'
+                    && ch != '_')
+                {
+                    goto invalid;
+                }
+                if (p - s->buffer->start > 31) {
+                    goto invalid;
+                }
+                break;
             }
             break;
 
@@ -436,10 +433,8 @@ ngx_mail_imap_parse_command(ngx_mail_session_t *s)
                 break;
             case CR:
                 state = sw_almost_done;
-                s->arg_end = p;
                 break;
             case LF:
-                s->arg_end = p;
                 goto done;
             case '"':
                 if (s->args.nelts <= 2) {
@@ -486,6 +481,22 @@ ngx_mail_imap_parse_command(ngx_mail_session_t *s)
                 }
                 arg->len = p - s->arg_start;
                 arg->data = s->arg_start;
+
+                if (s->backslash) {
+                    dst = s->arg_start;
+                    end = p;
+
+                    for (src = dst; src < end; dst++) {
+                        *dst = *src;
+                        if (*src++ == '\\') {
+                            *dst = *src++;
+                        }
+                    }
+
+                    arg->len = dst - s->arg_start;
+                    s->backslash = 0;
+                }
+
                 s->arg_start = NULL;
 
                 switch (ch) {
@@ -614,22 +625,6 @@ ngx_mail_imap_parse_command(ngx_mail_session_t *s)
 done:
 
     s->buffer->pos = p + 1;
-
-    if (s->arg_start) {
-        arg = ngx_array_push(&s->args);
-        if (arg == NULL) {
-            return NGX_ERROR;
-        }
-        arg->len = s->arg_end - s->arg_start;
-        arg->data = s->arg_start;
-
-        s->arg_start = NULL;
-        s->cmd_start = NULL;
-        s->quoted = 0;
-        s->no_sync_literal = 0;
-        s->literal_len = 0;
-    }
-
     s->state = (s->command != NGX_IMAP_AUTHENTICATE) ? sw_start : sw_argument;
 
     return NGX_OK;
@@ -637,7 +632,6 @@ done:
 invalid:
 
     s->state = sw_start;
-    s->arg_start = NULL;
     s->quoted = 0;
     s->backslash = 0;
     s->no_sync_literal = 0;
@@ -786,10 +780,8 @@ ngx_mail_smtp_parse_command(ngx_mail_session_t *s)
                 break;
             case CR:
                 state = sw_almost_done;
-                s->arg_end = p;
                 break;
             case LF:
-                s->arg_end = p;
                 goto done;
             default:
                 if (s->args.nelts <= 10) {
@@ -849,17 +841,6 @@ ngx_mail_smtp_parse_command(ngx_mail_session_t *s)
 done:
 
     s->buffer->pos = p + 1;
-
-    if (s->arg_start) {
-        arg = ngx_array_push(&s->args);
-        if (arg == NULL) {
-            return NGX_ERROR;
-        }
-        arg->len = s->arg_end - s->arg_start;
-        arg->data = s->arg_start;
-        s->arg_start = NULL;
-    }
-
     s->state = (s->command != NGX_SMTP_AUTH) ? sw_start : sw_argument;
 
     return NGX_OK;
@@ -867,7 +848,6 @@ done:
 invalid:
 
     s->state = sw_invalid;
-    s->arg_start = NULL;
 
     /* skip invalid command till LF */
 
