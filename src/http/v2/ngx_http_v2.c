@@ -325,6 +325,10 @@ ngx_http_v2_init(ngx_event_t *rev)
     rev->handler = ngx_http_v2_read_handler;
     c->write->handler = ngx_http_v2_write_handler;
 
+    if (c->read->timer_set) {
+        ngx_del_timer(c->read);
+    }
+
     c->idle = 1;
     ngx_reusable_connection(c, 0);
 
@@ -454,14 +458,6 @@ ngx_http_v2_read_handler(ngx_event_t *rev)
     }
 
     h2c->blocked = 0;
-
-    if (h2c->processing || h2c->pushing) {
-        if (rev->timer_set) {
-            ngx_del_timer(rev);
-        }
-
-        return;
-    }
 
     ngx_http_v2_handle_connection(h2c);
 }
@@ -637,8 +633,7 @@ ngx_http_v2_handle_connection(ngx_http_v2_connection_t *h2c)
 {
     ngx_int_t                  rc;
     ngx_connection_t          *c;
-    ngx_http_v2_srv_conf_t    *h2scf;
-    ngx_http_core_srv_conf_t  *cscf;
+    ngx_http_core_loc_conf_t  *clcf;
 
     if (h2c->last_out || h2c->processing || h2c->pushing) {
         return;
@@ -675,15 +670,16 @@ ngx_http_v2_handle_connection(ngx_http_v2_connection_t *h2c)
         return;
     }
 
+    clcf = ngx_http_get_module_loc_conf(h2c->http_connection->conf_ctx,
+                                        ngx_http_core_module);
+
+    if (!c->read->timer_set) {
+        ngx_add_timer(c->read, clcf->keepalive_timeout);
+    }
+
     ngx_reusable_connection(c, 1);
 
     if (h2c->state.incomplete) {
-        if (!c->read->timer_set) {
-            cscf = ngx_http_get_module_srv_conf(h2c->http_connection->conf_ctx,
-                                                ngx_http_core_module);
-            ngx_add_timer(c->read, cscf->client_header_timeout);
-        }
-
         return;
     }
 
@@ -708,11 +704,6 @@ ngx_http_v2_handle_connection(ngx_http_v2_connection_t *h2c)
     if (c->write->timer_set) {
         ngx_del_timer(c->write);
     }
-
-    h2scf = ngx_http_get_module_srv_conf(h2c->http_connection->conf_ctx,
-                                         ngx_http_v2_module);
-
-    ngx_add_timer(c->read, h2scf->idle_timeout);
 }
 
 
@@ -1200,12 +1191,14 @@ static u_char *
 ngx_http_v2_state_headers(ngx_http_v2_connection_t *h2c, u_char *pos,
     u_char *end)
 {
-    size_t                   size;
-    ngx_uint_t               padded, priority, depend, dependency, excl, weight;
-    ngx_uint_t               status;
-    ngx_http_v2_node_t      *node;
-    ngx_http_v2_stream_t    *stream;
-    ngx_http_v2_srv_conf_t  *h2scf;
+    size_t                     size;
+    ngx_uint_t                 padded, priority, depend, dependency, excl,
+                               weight;
+    ngx_uint_t                 status;
+    ngx_http_v2_node_t        *node;
+    ngx_http_v2_stream_t      *stream;
+    ngx_http_v2_srv_conf_t    *h2scf;
+    ngx_http_core_loc_conf_t  *clcf;
 
     padded = h2c->state.flags & NGX_HTTP_V2_PADDED_FLAG;
     priority = h2c->state.flags & NGX_HTTP_V2_PRIORITY_FLAG;
@@ -1364,7 +1357,10 @@ ngx_http_v2_state_headers(ngx_http_v2_connection_t *h2c, u_char *pos,
         ngx_http_v2_set_dependency(h2c, node, depend, excl);
     }
 
-    if (h2c->connection->requests >= h2scf->max_requests) {
+    clcf = ngx_http_get_module_loc_conf(h2c->http_connection->conf_ctx,
+                                        ngx_http_core_module);
+
+    if (h2c->connection->requests >= clcf->keepalive_requests) {
         h2c->goaway = 1;
 
         if (ngx_http_v2_send_goaway(h2c, NGX_HTTP_V2_NO_ERROR) == NGX_ERROR) {
@@ -3293,6 +3289,10 @@ ngx_http_v2_create_stream(ngx_http_v2_connection_t *h2c, ngx_uint_t push)
 
     h2c->priority_limit += h2scf->concurrent_streams;
 
+    if (h2c->connection->read->timer_set) {
+        ngx_del_timer(h2c->connection->read);
+    }
+
     return stream;
 }
 
@@ -4659,6 +4659,7 @@ ngx_http_v2_idle_handler(ngx_event_t *rev)
     ngx_connection_t          *c;
     ngx_http_v2_srv_conf_t    *h2scf;
     ngx_http_v2_connection_t  *h2c;
+    ngx_http_core_loc_conf_t  *clcf;
 
     c = rev->data;
     h2c = c->data;
@@ -4690,10 +4691,10 @@ ngx_http_v2_idle_handler(ngx_event_t *rev)
 
 #endif
 
-    h2scf = ngx_http_get_module_srv_conf(h2c->http_connection->conf_ctx,
-                                         ngx_http_v2_module);
+    clcf = ngx_http_get_module_loc_conf(h2c->http_connection->conf_ctx,
+                                        ngx_http_core_module);
 
-    if (h2c->idle++ > 10 * h2scf->max_requests) {
+    if (h2c->idle++ > 10 * clcf->keepalive_requests) {
         ngx_log_error(NGX_LOG_INFO, h2c->connection->log, 0,
                       "http2 flood detected");
         ngx_http_v2_finalize_connection(h2c, NGX_HTTP_V2_NO_ERROR);
@@ -4703,9 +4704,8 @@ ngx_http_v2_idle_handler(ngx_event_t *rev)
     c->destroyed = 0;
     ngx_reusable_connection(c, 0);
 
-    if (c->read->timer_set) {
-        ngx_del_timer(c->read);
-    }
+    h2scf = ngx_http_get_module_srv_conf(h2c->http_connection->conf_ctx,
+                                         ngx_http_v2_module);
 
     h2c->pool = ngx_create_pool(h2scf->pool_size, h2c->connection->log);
     if (h2c->pool == NULL) {
