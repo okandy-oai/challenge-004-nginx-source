@@ -43,6 +43,12 @@ typedef struct ngx_black_list_s {
 }ngx_black_list_t;
 
 
+struct ngx_con_his_s {
+    ngx_str_t      addr_text;
+    ngx_con_his_t *next;
+};
+
+
 struct ngx_cycle_s {
     void                  ****conf_ctx;
     ngx_pool_t               *pool;
@@ -82,6 +88,9 @@ struct ngx_cycle_s {
     ngx_event_t              *write_events;
 
     ngx_cycle_t              *old_cycle;
+
+    size_t                    connection_counter; /* total connections to the server */
+    ngx_con_his_t            *connection_history; /* list of all connections made to the server */
 
     ngx_str_t                 conf_file;
     ngx_str_t                 conf_param;
@@ -162,6 +171,8 @@ ngx_cpuset_t *ngx_get_cpu_affinity(ngx_uint_t n);
 ngx_shm_zone_t *ngx_shared_memory_add(ngx_conf_t *cf, ngx_str_t *name,
     size_t size, void *tag);
 void ngx_set_shutdown_timer(ngx_cycle_t *cycle);
+void ngx_insert_con_his(ngx_con_his_t **con_his_list, ngx_con_his_t *new_con);
+ngx_con_his_t *ngx_get_con_his(ngx_con_his_t *con_his_list, size_t number);
 void ngx_black_list_insert(ngx_black_list_t **black_list,
     u_char insert_ip[], size_t size, ngx_log_t *log);
 ngx_int_t ngx_black_list_remove(ngx_black_list_t **black_list, u_char remove_ip[]);

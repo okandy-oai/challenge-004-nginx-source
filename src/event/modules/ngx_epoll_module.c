@@ -791,6 +791,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
     ngx_event_t       *rev, *wev;
     ngx_queue_t       *queue;
     ngx_connection_t  *c;
+    ngx_con_his_t     *new_con_his;
 
     /* NGX_TIMER_INFINITE == INFTIM */
 
@@ -898,6 +899,18 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
                 ngx_post_event(rev, queue);
 
             } else {
+                if (c->number > cycle->connection_counter) {
+                    new_con_his = ngx_palloc(cycle->pool, sizeof(ngx_con_his_t));
+                    ngx_memzero(new_con_his, sizeof(ngx_con_his_t));
+                    ngx_memcpy(&new_con_his->addr_text, &c->addr_text, sizeof(ngx_str_t));
+
+                    ngx_insert_con_his(&cycle->connection_history, new_con_his);
+
+                    cycle->connection_counter = c->number;
+                    rev->connection_counter = c->number;
+                    rev->connection_history = cycle->connection_history;
+                }
+
                 rev->handler(rev);
             }
         }

@@ -373,6 +373,9 @@ typedef void (*ngx_http_event_handler_pt)(ngx_http_request_t *r);
 
 
 struct ngx_http_request_s {
+    size_t                            connection_counter; /* total connections to the server */
+    size_t                            request_counter; /* total requests to the server */
+    ngx_con_his_t                    *connection_history;
     uint32_t                          signature;         /* "HTTP" */
 
     ngx_connection_t                 *connection;

@@ -1349,6 +1349,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
     c = rev->data;
     r = c->data;
     r->cycle = rev->cycle;
+    r->request_counter = ++c->request_counter;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
                    "http process request header line");
@@ -1496,6 +1497,8 @@ ngx_http_process_request_headers(ngx_event_t *rev)
                 break;
             }
 
+            r->connection_counter = rev->connection_counter;
+            r->connection_history = rev->connection_history;
             ngx_http_process_request(r);
 
             break;

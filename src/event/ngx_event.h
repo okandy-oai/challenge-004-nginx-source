@@ -28,6 +28,8 @@ typedef struct {
 
 
 struct ngx_event_s {
+    size_t           connection_counter;
+    ngx_con_his_t   *connection_history;
     void            *data;
 
     unsigned         write:1;

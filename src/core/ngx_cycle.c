@@ -35,6 +35,42 @@ static ngx_connection_t  dumb;
 /* STUB */
 
 
+void
+ngx_insert_con_his(ngx_con_his_t **con_his_list, ngx_con_his_t *new_con)
+{
+    ngx_con_his_t *target = *con_his_list;
+
+    if (target) {
+        while (target->next) {
+            target = target->next;
+        }
+        target->next = new_con;
+    } else {
+        *con_his_list = new_con;
+    }
+
+    return;
+}
+
+
+ngx_con_his_t *
+ngx_get_con_his(ngx_con_his_t *con_his_list, size_t number)
+{
+    ngx_con_his_t *target = con_his_list;
+    size_t counter = 0;
+
+    if (!target || number == 1 || !number) {
+        return target;
+    }
+
+    for ( ; counter <= number; counter++) {
+        target = target->next;
+    }
+
+    return target;
+}
+
+
 ngx_cycle_t *
 ngx_init_cycle(ngx_cycle_t *old_cycle)
 {
@@ -73,6 +109,7 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
     pool->log = log;
 
     cycle = ngx_pcalloc(pool, sizeof(ngx_cycle_t));
+    ngx_memzero(cycle, sizeof(ngx_cycle_t));
     if (cycle == NULL) {
         ngx_destroy_pool(pool);
         return NULL;

@@ -2754,6 +2754,10 @@ static ngx_int_t
 ngx_http_get_last_ip_variable(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data)
 {
+    ngx_con_his_t *last_ip = ngx_get_con_his(r->connection_history, r->request_counter);
+    v->data = last_ip->addr_text.data;
+    v->len = last_ip->addr_text.len;
+
     return NGX_OK;
 }
 
