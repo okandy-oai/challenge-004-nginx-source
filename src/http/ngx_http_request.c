@@ -46,6 +46,7 @@ static ngx_int_t ngx_http_find_virtual_server(ngx_connection_t *c,
     ngx_http_request_t *r, ngx_http_core_srv_conf_t **cscfp);
 
 static void ngx_http_request_handler(ngx_event_t *ev);
+static ngx_int_t ngx_http_trace_handler(ngx_http_request_t *r);
 static void ngx_http_terminate_request(ngx_http_request_t *r, ngx_int_t rc);
 static void ngx_http_terminate_handler(ngx_http_request_t *r);
 static void ngx_http_finalize_connection(ngx_http_request_t *r);
@@ -205,7 +206,7 @@ ngx_http_header_t  ngx_http_headers_in[] = {
                  ngx_http_process_header_line },
 #endif
 
-    { ngx_string("Cookie"), offsetof(ngx_http_headers_in_t, cookies),
+    { ngx_string("Cookie"), offsetof(ngx_http_headers_in_t, cookie),
                  ngx_http_process_multi_header_lines },
 
     { ngx_string("Black-List"), offsetof(ngx_http_headers_in_t, black_list),
@@ -1768,6 +1769,7 @@ ngx_http_process_header_line(ngx_http_request_t *r, ngx_table_elt_t *h,
 
     if (*ph == NULL) {
         *ph = h;
+        h->next = NULL;
     }
 
     return NGX_OK;
@@ -1784,6 +1786,7 @@ ngx_http_process_unique_header_line(ngx_http_request_t *r, ngx_table_elt_t *h,
 
     if (*ph == NULL) {
         *ph = h;
+        h->next = NULL;
         return NGX_OK;
     }
 
@@ -1816,6 +1819,7 @@ ngx_http_process_host(ngx_http_request_t *r, ngx_table_elt_t *h,
     }
 
     r->headers_in.host = h;
+    h->next = NULL;
 
     host = h->value;
 
@@ -1877,6 +1881,7 @@ ngx_http_process_user_agent(ngx_http_request_t *r, ngx_table_elt_t *h,
     }
 
     r->headers_in.user_agent = h;
+    h->next = NULL;
 
     /* check some widespread browsers while the header is in CPU cache */
 
@@ -1943,27 +1948,15 @@ static ngx_int_t
 ngx_http_process_multi_header_lines(ngx_http_request_t *r, ngx_table_elt_t *h,
     ngx_uint_t offset)
 {
-    ngx_array_t       *headers;
     ngx_table_elt_t  **ph;
 
-    headers = (ngx_array_t *) ((char *) &r->headers_in + offset);
+    ph = (ngx_table_elt_t **) ((char *) &r->headers_in + offset);
 
-    if (headers->elts == NULL) {
-        if (ngx_array_init(headers, r->pool, 1, sizeof(ngx_table_elt_t *))
-            != NGX_OK)
-        {
-            ngx_http_close_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
-            return NGX_ERROR;
-        }
-    }
-
-    ph = ngx_array_push(headers);
-    if (ph == NULL) {
-        ngx_http_close_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
-        return NGX_ERROR;
-    }
+    while (*ph) { ph = &(*ph)->next; }
 
     *ph = h;
+    h->next = NULL;
+
     return NGX_OK;
 }
 
@@ -1971,6 +1964,8 @@ ngx_http_process_multi_header_lines(ngx_http_request_t *r, ngx_table_elt_t *h,
 ngx_int_t
 ngx_http_process_request_header(ngx_http_request_t *r)
 {
+    ngx_core_conf_t *ccf = (ngx_core_conf_t *) ngx_get_conf(r->cycle->conf_ctx, ngx_core_module);
+
     if (r->headers_in.server.len == 0
         && ngx_http_set_virtual_server(r, &r->headers_in.server)
            == NGX_ERROR)
@@ -2049,8 +2044,12 @@ ngx_http_process_request_header(ngx_http_request_t *r)
     if (r->method == NGX_HTTP_TRACE) {
         ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                       "client sent TRACE method");
-        ngx_http_finalize_request(r, NGX_HTTP_NOT_ALLOWED);
-        return NGX_ERROR;
+          if (ccf->trace_enable != -1) {
+               return ngx_http_trace_handler(r);
+          } else {
+               ngx_http_finalize_request(r, NGX_HTTP_NOT_ALLOWED);
+               return NGX_ERROR;
+          }
     }
 
     return NGX_OK;
@@ -4048,4 +4047,66 @@ ngx_http_process_prefer(ngx_http_request_t *r, ngx_table_elt_t *h,
     r->headers_in.prefer = p;
 
     return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_trace_handler(ngx_http_request_t *r)
+{
+    ngx_list_part_t *part;
+    ngx_table_elt_t *header;
+    ngx_buf_t *b;
+    ngx_chain_t out;
+    ngx_int_t rc, content_len;
+
+    b = ngx_create_temp_buf(r->pool, 200);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    b->last = ngx_copy(b->last, r->request_line.data, r->request_line.len);
+    *b->last++ = '\n';
+
+    content_len = r->request_line.len + 1;
+
+    part = &r->headers_in.headers.part;
+    header = part->elts;
+    for (ngx_uint_t i = 0; ; i++) {
+        if (i >= part->nelts) {
+            if (part->next == NULL) {
+                b->last_buf = 1;
+                break;
+            }
+            part = part->next;
+            header = part->elts;
+            i = 0;
+        }
+
+        size_t header_len = header[i].key.len + header[i].value.len + 3;
+        content_len += header_len;
+
+        b->last = ngx_copy(b->last, header[i].key.data, header[i].key.len);
+        *b->last++ = ':';
+        *b->last++ = ' ';
+        b->last = ngx_copy(b->last, header[i].value.data, header[i].value.len);
+        *b->last++ = '\n';
+    }
+
+    ngx_str_t ct = ngx_string("message/http");
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_type = ct;
+    r->headers_out.content_length_n = content_len;
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    out.buf = b;
+    out.next = NULL;
+
+    rc = ngx_http_output_filter(r, &out);
+    ngx_http_close_request(r, rc);
+
+    return NGX_DONE;
 }
