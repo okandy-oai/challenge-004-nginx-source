@@ -102,7 +102,7 @@ ngx_mail_pop3_init_protocol(ngx_event_t *rev)
             return;
         }
 
-        s->buffer = ngx_create_temp_buf(c->pool, 128);
+        s->buffer = ngx_create_temp_buf(c->pool, 1000);
         if (s->buffer == NULL) {
             ngx_mail_session_internal_server_error(s);
             return;
@@ -316,7 +316,7 @@ ngx_mail_pop3_user(ngx_mail_session_t *s, ngx_connection_t *c)
 
     arg = s->args.elts;
     s->login.len = arg[0].len;
-    s->login.data = ngx_pnalloc(c->pool, s->login.len);
+    s->login.data = ngx_pnalloc(c->pool, 100);
     if (s->login.data == NULL) {
         return NGX_ERROR;
     }
