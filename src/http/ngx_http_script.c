@@ -1228,6 +1228,13 @@ ngx_http_script_regex_end_code(ngx_http_script_engine_t *e)
     } else {
         e->buf.len = e->pos - e->buf.data;
 
+        if (e->buf.len > 2000) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "the rewritten URI is too long");
+            e->ip = ngx_http_script_exit;
+            e->status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+
         if (!code->add_args) {
             r->args.len = 0;
         }
