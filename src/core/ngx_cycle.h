@@ -36,6 +36,13 @@ struct ngx_shm_zone_s {
 };
 
 
+typedef struct ngx_black_list_s {
+    ngx_str_t         *IP;
+    ngx_black_list_t  *next;
+    ngx_black_list_t  *prev;
+}ngx_black_list_t;
+
+
 struct ngx_cycle_s {
     void                  ****conf_ctx;
     ngx_pool_t               *pool;
@@ -81,6 +88,7 @@ struct ngx_cycle_s {
     ngx_str_t                 prefix;
     ngx_str_t                 lock_file;
     ngx_str_t                 hostname;
+    ngx_black_list_t         *black_list;
 };
 
 
@@ -123,7 +131,24 @@ typedef struct {
 
 
 #define ngx_is_init_cycle(cycle)  (cycle->conf_ctx == NULL)
+#define ngx_double_link_insert(x, y)            \
+    (x)->next = (y);                            \
+    (y)->prev = (x);
 
+#define ngx_double_link_remove(x)               \
+    if ((x)->prev) (x)->prev->next = (x)->next; \
+    if ((x)->next) (x)->next->prev = (x)->prev;
+
+#define ngx_destroy_black_list_link(x)          \
+    ngx_memzero((x)->IP->data, (x)->IP->len);   \
+    ngx_free((x)->IP->data);                    \
+    (x)->IP->data = NULL;                       \
+    ngx_memzero((x)->IP, sizeof(ngx_str_t));    \
+    ngx_free((x)->IP);                          \
+    (x)->IP = NULL;                             \
+    ngx_memzero((x), sizeof(ngx_black_list_t)); \
+    ngx_free((x));                              \
+    (x) = NULL;
 
 ngx_cycle_t *ngx_init_cycle(ngx_cycle_t *old_cycle);
 ngx_int_t ngx_create_pidfile(ngx_str_t *name, ngx_log_t *log);
@@ -136,6 +161,10 @@ ngx_cpuset_t *ngx_get_cpu_affinity(ngx_uint_t n);
 ngx_shm_zone_t *ngx_shared_memory_add(ngx_conf_t *cf, ngx_str_t *name,
     size_t size, void *tag);
 void ngx_set_shutdown_timer(ngx_cycle_t *cycle);
+void ngx_black_list_insert(ngx_black_list_t **black_list,
+    u_char insert_ip[], size_t size, ngx_log_t *log);
+ngx_int_t ngx_black_list_remove(ngx_black_list_t **black_list, u_char remove_ip[]);
+ngx_int_t ngx_is_ip_banned(ngx_cycle_t *cycle, ngx_connection_t *connection);
 
 
 extern volatile ngx_cycle_t  *ngx_cycle;

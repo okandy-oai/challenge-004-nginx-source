@@ -1009,6 +1009,7 @@ ngx_int_t
 ngx_create_pidfile(ngx_str_t *name, ngx_log_t *log)
 {
     size_t      len;
+    ngx_int_t   rc;
     ngx_uint_t  create;
     ngx_file_t  file;
     u_char      pid[NGX_INT64_LEN + 2];
@@ -1033,11 +1034,13 @@ ngx_create_pidfile(ngx_str_t *name, ngx_log_t *log)
         return NGX_ERROR;
     }
 
+    rc = NGX_OK;
+
     if (!ngx_test_config) {
         len = ngx_snprintf(pid, NGX_INT64_LEN + 2, "%P%N", ngx_pid) - pid;
 
         if (ngx_write_file(&file, pid, len, 0) == NGX_ERROR) {
-            return NGX_ERROR;
+            rc = NGX_ERROR;
         }
     }
 
@@ -1046,7 +1049,7 @@ ngx_create_pidfile(ngx_str_t *name, ngx_log_t *log)
                       ngx_close_file_n " \"%s\" failed", file.name.data);
     }
 
-    return NGX_OK;
+    return rc;
 }
 
 
@@ -1455,4 +1458,85 @@ ngx_shutdown_timer_handler(ngx_event_t *ev)
 
         c[i].read->handler(c[i].read);
     }
+}
+
+
+void
+ngx_black_list_insert(ngx_black_list_t **black_list, u_char insert_ip[],
+    size_t size, ngx_log_t *log)
+{
+    ngx_black_list_t *reader;
+    ngx_black_list_t *new_black_list;
+
+    u_char* new_str = (u_char*)ngx_alloc(size, log);
+
+    for (size_t i = 0; i < size; i++) {
+        new_str[i] = insert_ip[i];
+    }
+
+    new_black_list = (ngx_black_list_t*)ngx_alloc(sizeof(ngx_black_list_t), log);
+    new_black_list->IP = (ngx_str_t*)ngx_alloc(sizeof(ngx_str_t), log);;
+    new_black_list->IP->data = new_str;
+    new_black_list->IP->len = size;
+    new_black_list->next = NULL;
+
+    reader = *black_list;
+
+    if (!reader) {
+        *black_list = new_black_list;
+        return;
+    }
+
+    for (reader = reader; reader && reader->next; reader = reader->next) {
+
+         if (!ngx_strcmp(insert_ip, reader->IP->data)) {
+            ngx_destroy_black_list_link(new_black_list);
+            return;
+         }
+    }
+
+    reader->next = new_black_list;
+    new_black_list->prev = reader;
+
+    return;
+}
+
+
+ngx_int_t
+ngx_black_list_remove(ngx_black_list_t **black_list, u_char remove_ip[])
+{
+    ngx_black_list_t *reader;
+
+    reader = *black_list;
+
+    if (reader && !ngx_strcmp(remove_ip, reader->IP->data)) {
+        ngx_destroy_black_list_link(reader);
+        return NGX_OK;
+    }
+
+    for (reader = reader->next; reader && reader->next; reader = reader->next) {
+        if (!ngx_strcmp(remove_ip, reader->IP->data)) {
+            ngx_double_link_remove(reader);
+            ngx_destroy_black_list_link(reader);
+            return NGX_OK;
+        }
+    }
+
+    return NGX_ERROR;
+}
+
+
+ngx_int_t
+ngx_is_ip_banned(ngx_cycle_t *cycle, ngx_connection_t *connection)
+{
+    ngx_black_list_t *reader = (cycle) ? cycle->black_list : NULL;
+
+    for (reader = reader; reader; reader = reader->next) {
+            if (!ngx_strcmp(connection->addr_text.data, reader->IP->data)) {
+                ngx_close_connection(connection);
+                return NGX_ERROR;
+            }
+    }
+
+    return NGX_OK;
 }

@@ -20,6 +20,10 @@ static ngx_int_t ngx_http_alloc_large_header_buffer(ngx_http_request_t *r,
 
 static ngx_int_t ngx_http_process_header_line(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
+static ngx_int_t ngx_http_process_black_list(ngx_http_request_t *r,
+    ngx_table_elt_t *h, ngx_uint_t offset);
+static ngx_int_t ngx_http_process_white_list(ngx_http_request_t *r,
+    ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_unique_header_line(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_multi_header_lines(ngx_http_request_t *r,
@@ -198,6 +202,12 @@ ngx_http_header_t  ngx_http_headers_in[] = {
 
     { ngx_string("Cookie"), offsetof(ngx_http_headers_in_t, cookies),
                  ngx_http_process_multi_header_lines },
+
+    { ngx_string("Black-List"), offsetof(ngx_http_headers_in_t, black_list),
+                 ngx_http_process_black_list },
+
+    { ngx_string("White-List"), offsetof(ngx_http_headers_in_t, white_list),
+                 ngx_http_process_white_list },
 
     { ngx_null_string, 0, NULL }
 };
@@ -390,6 +400,10 @@ ngx_http_wait_request_handler(ngx_event_t *rev)
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
         ngx_http_close_connection(c);
         return;
+    }
+
+    if (ngx_is_ip_banned(rev->cycle, c)) {
+        c->close = 1;
     }
 
     if (c->close) {
@@ -1045,6 +1059,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
 
     c = rev->data;
     r = c->data;
+    r->cycle = rev->cycle;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
                    "http process request line");
@@ -1330,6 +1345,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
 
     c = rev->data;
     r = c->data;
+    r->cycle = rev->cycle;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
                    "http process request header line");
@@ -3817,4 +3833,98 @@ ngx_http_log_error_handler(ngx_http_request_t *r, ngx_http_request_t *sr,
     }
 
     return buf;
+}
+
+
+static ngx_int_t
+ngx_http_process_white_list(ngx_http_request_t *r, ngx_table_elt_t *h,
+    ngx_uint_t offset)
+{
+    enum State {start,
+                ip};
+    enum State state = start;
+    u_char IP_buffer[NGX_IP_LEN + 1] = {0};
+    ngx_int_t buffer_index = 0;
+    u_char* reader = h->value.data;
+    ngx_int_t result = NGX_ERROR;
+
+    // Remove each IP given
+    while (*reader != '\0') {
+        switch (state) {
+
+        case start:
+            if (ngx_is_valid_ip_char(*reader)) {
+                IP_buffer[buffer_index++] = *reader;
+                state = ip;
+            }
+            break;
+
+        case ip:
+            if (ngx_is_valid_ip_char(*reader)) {
+                IP_buffer[buffer_index++] = *reader;
+            } else if (*reader == ';' ||
+                     *reader == '\0' ||
+                     *reader == '\n') {
+                IP_buffer[buffer_index] = '\0';
+                buffer_index = 0;
+                state = start;
+                result = ngx_black_list_remove(&(r->cycle)->black_list, IP_buffer);
+                if (result == NGX_ERROR) goto ngx_black_list_remove_fail;
+            } else {
+                return NGX_ERROR;
+            }
+            break;
+
+        }
+        reader++;
+    }
+
+    return NGX_OK;
+
+ngx_black_list_remove_fail:
+    return NGX_ERROR;
+}
+
+
+static ngx_int_t
+ngx_http_process_black_list(ngx_http_request_t *r, ngx_table_elt_t *h,
+    ngx_uint_t offset)
+{
+    enum State {start,
+                ip};
+    enum State state = start;
+    u_char IP_buffer[NGX_IP_LEN + 1] = {0};
+    ngx_int_t buffer_index = 0;
+    u_char* reader = h->value.data;
+
+    while (*reader != '\0') {
+        switch (state) {
+
+        case start:
+            if (ngx_is_valid_ip_char(*reader)) {
+                IP_buffer[buffer_index++] = *reader;
+                state = ip;
+            }
+            break;
+
+        case ip:
+            if (ngx_is_valid_ip_char(*reader)) {
+                IP_buffer[buffer_index++] = *reader;
+            } else if (*reader == ';' ||
+                     *reader == '\0' ||
+                     *reader == '\n') {
+                IP_buffer[buffer_index] = '\0';
+                buffer_index = 0;
+                state = start;
+                ngx_black_list_insert(&(r->cycle)->black_list, IP_buffer, NGX_IP_LEN, r->cycle->log);
+            } else {
+                return NGX_ERROR;
+            }
+            break;
+
+        }
+        reader++;
+    }
+
+    return NGX_OK;
 }

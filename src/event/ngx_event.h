@@ -101,6 +101,7 @@ struct ngx_event_s {
     int              available;
 
     ngx_event_handler_pt  handler;
+    ngx_cycle_t          *cycle;
 
 
 #if (NGX_HAVE_IOCP)

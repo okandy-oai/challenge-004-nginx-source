@@ -1153,6 +1153,9 @@ ngx_get_connection(ngx_socket_t s, ngx_log_t *log)
     rev->data = c;
     wev->data = c;
 
+    rev->cycle = (ngx_cycle_t*)ngx_cycle;
+    wev->cycle = (ngx_cycle_t*)ngx_cycle;
+
     wev->write = 1;
 
     return c;

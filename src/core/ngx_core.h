@@ -15,6 +15,7 @@
 typedef struct ngx_module_s          ngx_module_t;
 typedef struct ngx_conf_s            ngx_conf_t;
 typedef struct ngx_cycle_s           ngx_cycle_t;
+typedef struct ngx_black_list_s      ngx_black_list_t;
 typedef struct ngx_pool_s            ngx_pool_t;
 typedef struct ngx_chain_s           ngx_chain_t;
 typedef struct ngx_log_s             ngx_log_t;

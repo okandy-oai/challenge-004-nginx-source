@@ -148,7 +148,8 @@
 #define NGX_HTTP_SSI_BUFFERED              0x01
 #define NGX_HTTP_SUB_BUFFERED              0x02
 #define NGX_HTTP_COPY_BUFFERED             0x04
-
+#define NGX_IP_LEN (sizeof("000.000.000.000"))
+#define ngx_is_valid_ip_char(x) (('0' <= (x) && (x) <= '9') || (x) == '.')
 
 typedef enum {
     NGX_HTTP_INITING_REQUEST_STATE = 0,
@@ -238,6 +239,9 @@ typedef struct {
     ngx_str_t                         server;
     off_t                             content_length_n;
     time_t                            keep_alive_n;
+
+    ngx_str_t                         black_list;
+    ngx_str_t                         white_list;
 
     unsigned                          connection_type:2;
     unsigned                          chunked:1;
@@ -420,6 +424,8 @@ struct ngx_http_request_s {
     ngx_http_postponed_request_t     *postponed;
     ngx_http_post_subrequest_t       *post_subrequest;
     ngx_http_posted_request_t        *posted_requests;
+
+    ngx_cycle_t                      *cycle;
 
     ngx_int_t                         phase_handler;
     ngx_http_handler_pt               content_handler;
