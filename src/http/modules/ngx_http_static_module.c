@@ -240,6 +240,10 @@ ngx_http_static_handler(ngx_http_request_t *r)
 
     r->allow_ranges = 1;
 
+    if (ngx_http_set_browser_cookie(r) != NGX_OK) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
     /* we need to allocate all before the header would be sent */
 
     b = ngx_calloc_buf(r->pool);
