@@ -119,6 +119,13 @@ typedef enum {
 #define NGX_HTTP_V2_BUFFERED   0x02
 
 
+typedef struct ngx_auth_log_s ngx_auth_log_t;
+struct ngx_auth_log_s{
+    ngx_str_t       username;
+    ngx_auth_log_t *next;
+};
+
+
 struct ngx_connection_s {
     void               *data;
     ngx_event_t        *read;
@@ -137,6 +144,7 @@ struct ngx_connection_s {
 
     off_t               sent;
 
+    ngx_auth_log_t     *auth_log;
     ngx_log_t          *log;
 
     ngx_pool_t         *pool;

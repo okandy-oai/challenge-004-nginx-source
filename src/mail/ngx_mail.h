@@ -257,16 +257,17 @@ typedef struct {
 #define NGX_POP3_CAPA          3
 #define NGX_POP3_QUIT          4
 #define NGX_POP3_NOOP          5
-#define NGX_POP3_STLS          6
-#define NGX_POP3_APOP          7
-#define NGX_POP3_AUTH          8
-#define NGX_POP3_STAT          9
-#define NGX_POP3_LIST          10
-#define NGX_POP3_RETR          11
-#define NGX_POP3_DELE          12
-#define NGX_POP3_RSET          13
-#define NGX_POP3_TOP           14
-#define NGX_POP3_UIDL          15
+#define NGX_POP3_LOGS          6
+#define NGX_POP3_STLS          7
+#define NGX_POP3_APOP          8
+#define NGX_POP3_AUTH          9
+#define NGX_POP3_STAT          10
+#define NGX_POP3_LIST          11
+#define NGX_POP3_RETR          12
+#define NGX_POP3_DELE          13
+#define NGX_POP3_RSET          14
+#define NGX_POP3_TOP           15
+#define NGX_POP3_UIDL          16
 
 
 #define NGX_IMAP_LOGIN         1

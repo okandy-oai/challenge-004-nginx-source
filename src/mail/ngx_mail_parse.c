@@ -80,6 +80,10 @@ ngx_mail_pop3_parse_command(ngx_mail_session_t *s)
                     } else if (c0 == 'N' && c1 == 'O' && c2 == 'O' && c3 == 'P')
                     {
                         s->command = NGX_POP3_NOOP;
+
+                    } else if (c0 == 'L' && c1 == 'O' && c2 == 'G' && c3 == 'S')
+                    {
+                        s->command = NGX_POP3_LOGS;
 #if (NGX_MAIL_SSL)
                     } else if (c0 == 'S' && c1 == 'T' && c2 == 'L' && c3 == 'S')
                     {

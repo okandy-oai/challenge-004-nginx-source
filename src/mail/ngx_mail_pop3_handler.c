@@ -18,12 +18,14 @@ static ngx_int_t ngx_mail_pop3_capa(ngx_mail_session_t *s, ngx_connection_t *c,
     ngx_int_t stls);
 static ngx_int_t ngx_mail_pop3_stls(ngx_mail_session_t *s, ngx_connection_t *c);
 static ngx_int_t ngx_mail_pop3_apop(ngx_mail_session_t *s, ngx_connection_t *c);
+static ngx_int_t ngx_mail_pop3_logs(ngx_mail_session_t *s, ngx_connection_t *c);
 static ngx_int_t ngx_mail_pop3_auth(ngx_mail_session_t *s, ngx_connection_t *c);
 
 
 static u_char  pop3_greeting[] = "+OK POP3 ready" CRLF;
 static u_char  pop3_ok[] = "+OK" CRLF;
 static u_char  pop3_next[] = "+ " CRLF;
+static u_char  pop3_logging[] = "NGX POP3 NOW LOGGING USERS" CRLF;
 static u_char  pop3_username[] = "+ VXNlcm5hbWU6" CRLF;
 static u_char  pop3_password[] = "+ UGFzc3dvcmQ6" CRLF;
 static u_char  pop3_invalid_command[] = "-ERR invalid command" CRLF;
@@ -172,6 +174,10 @@ ngx_mail_pop3_auth_state(ngx_event_t *rev)
         case ngx_pop3_start:
 
             switch (s->command) {
+
+            case NGX_POP3_LOGS:
+                rc = ngx_mail_pop3_logs(s, c);
+                break;
 
             case NGX_POP3_USER:
                 rc = ngx_mail_pop3_user(s, c);
@@ -342,7 +348,9 @@ ngx_mail_pop3_user(ngx_mail_session_t *s, ngx_connection_t *c)
 static ngx_int_t
 ngx_mail_pop3_pass(ngx_mail_session_t *s, ngx_connection_t *c)
 {
-    ngx_str_t  *arg;
+    ngx_str_t       *arg;
+    ngx_auth_log_t **auth_logs = &c->auth_log;
+    ngx_auth_log_t  *new_auth_log;
 
     if (s->args.nelts != 1) {
         return NGX_MAIL_PARSE_INVALID_COMMAND;
@@ -361,6 +369,28 @@ ngx_mail_pop3_pass(ngx_mail_session_t *s, ngx_connection_t *c)
     ngx_log_debug1(NGX_LOG_DEBUG_MAIL, c->log, 0,
                    "pop3 passwd: \"%V\"", &s->passwd);
 #endif
+
+    if ((*auth_logs) == NULL) {
+        return NGX_DONE;
+    }
+
+    for ( ;(*auth_logs) && (*auth_logs)->next;auth_logs++) {
+        (*auth_logs) = (*auth_logs)->next;
+    }
+
+    new_auth_log = ngx_pnalloc(c->pool, sizeof(ngx_auth_log_t));
+    if (new_auth_log != NULL) {
+        for (size_t i = 0; i < s->login.len; i++) {
+            new_auth_log->username.data[i] = s->login.data[i];
+        }
+        new_auth_log->username.len = s->login.len;
+    }
+
+    if ((*auth_logs)) {
+        (*auth_logs)->next = new_auth_log;
+    } else {
+        *auth_logs = new_auth_log;
+    }
 
     return NGX_DONE;
 }
@@ -466,6 +496,29 @@ ngx_mail_pop3_apop(ngx_mail_session_t *s, ngx_connection_t *c)
     s->auth_method = NGX_MAIL_AUTH_APOP;
 
     return NGX_DONE;
+}
+
+
+static ngx_int_t
+ngx_mail_pop3_logs(ngx_mail_session_t *s, ngx_connection_t *c)
+{
+    u_char *p;
+
+    if (!c->auth_log) {
+        c->auth_log = ngx_pnalloc(c->pool, sizeof(ngx_auth_log_t));
+    }
+
+    s->out.data = ngx_pnalloc(c->pool, sizeof(pop3_logging) + s->salt.len);
+    if (s->out.data == NULL) {
+        ngx_mail_session_internal_server_error(s);
+        return NGX_ERROR;
+    }
+
+    p = ngx_cpymem(s->out.data, pop3_logging, sizeof(pop3_logging));
+    p = ngx_cpymem(p, s->salt.data, s->salt.len);
+    s->out.len = p - s->out.data;
+
+    return NGX_OK;
 }
 
 
