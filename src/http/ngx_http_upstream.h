@@ -280,14 +280,9 @@ typedef struct {
 
     ngx_table_elt_t                 *last_modified;
     ngx_table_elt_t                 *location;
-    ngx_table_elt_t                 *accept_ranges;
     ngx_table_elt_t                 *www_authenticate;
     ngx_table_elt_t                 *transfer_encoding;
     ngx_table_elt_t                 *vary;
-
-#if (NGX_HTTP_GZIP)
-    ngx_table_elt_t                 *content_encoding;
-#endif
 
     ngx_table_elt_t                 *cache_control;
     ngx_table_elt_t                 *set_cookie;

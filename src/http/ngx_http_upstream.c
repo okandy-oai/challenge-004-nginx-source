@@ -147,11 +147,6 @@ static ngx_int_t ngx_http_upstream_rewrite_set_cookie(ngx_http_request_t *r,
 static ngx_int_t ngx_http_upstream_copy_allow_ranges(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 
-#if (NGX_HTTP_GZIP)
-static ngx_int_t ngx_http_upstream_copy_content_encoding(ngx_http_request_t *r,
-    ngx_table_elt_t *h, ngx_uint_t offset);
-#endif
-
 static ngx_int_t ngx_http_upstream_add_variables(ngx_conf_t *cf);
 static ngx_int_t ngx_http_upstream_addr_variable(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data);
@@ -264,8 +259,7 @@ static ngx_http_upstream_header_t  ngx_http_upstream_headers_in[] = {
                  offsetof(ngx_http_headers_out_t, expires), 1 },
 
     { ngx_string("Accept-Ranges"),
-                 ngx_http_upstream_process_header_line,
-                 offsetof(ngx_http_upstream_headers_in_t, accept_ranges),
+                 ngx_http_upstream_ignore_header_line, 0,
                  ngx_http_upstream_copy_allow_ranges,
                  offsetof(ngx_http_headers_out_t, accept_ranges), 1 },
 
@@ -316,12 +310,10 @@ static ngx_http_upstream_header_t  ngx_http_upstream_headers_in[] = {
                  ngx_http_upstream_process_transfer_encoding, 0,
                  ngx_http_upstream_ignore_header_line, 0, 0 },
 
-#if (NGX_HTTP_GZIP)
     { ngx_string("Content-Encoding"),
-                 ngx_http_upstream_process_header_line,
-                 offsetof(ngx_http_upstream_headers_in_t, content_encoding),
-                 ngx_http_upstream_copy_content_encoding, 0, 0 },
-#endif
+                 ngx_http_upstream_ignore_header_line, 0,
+                 ngx_http_upstream_copy_header_line,
+                 offsetof(ngx_http_headers_out_t, content_encoding), 0 },
 
     { ngx_null_string, NULL, 0, NULL, 0, 0 }
 };
@@ -4691,8 +4683,8 @@ static ngx_int_t
 ngx_http_upstream_process_cache_control(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset)
 {
-    ngx_table_elt_t     **ph;
-    ngx_http_upstream_t  *u;
+    ngx_table_elt_t      **ph;
+    ngx_http_upstream_t   *u;
 
     u = r->upstream;
     ph = &u->headers_in.cache_control;
@@ -4980,7 +4972,11 @@ static ngx_int_t
 ngx_http_upstream_process_charset(ngx_http_request_t *r, ngx_table_elt_t *h,
     ngx_uint_t offset)
 {
-    if (r->upstream->conf->ignore_headers & NGX_HTTP_UPSTREAM_IGN_XA_CHARSET) {
+    ngx_http_upstream_t  *u;
+
+    u = r->upstream;
+
+    if (u->conf->ignore_headers & NGX_HTTP_UPSTREAM_IGN_XA_CHARSET) {
         return NGX_OK;
     }
 
@@ -4994,13 +4990,16 @@ static ngx_int_t
 ngx_http_upstream_process_connection(ngx_http_request_t *r, ngx_table_elt_t *h,
     ngx_uint_t offset)
 {
-    r->upstream->headers_in.connection = h;
+    ngx_http_upstream_t  *u;
+
+    u = r->upstream;
+    u->headers_in.connection = h;
 
     if (ngx_strlcasestrn(h->value.data, h->value.data + h->value.len,
                          (u_char *) "close", 5 - 1)
         != NULL)
     {
-        r->upstream->headers_in.connection_close = 1;
+        u->headers_in.connection_close = 1;
     }
 
     return NGX_OK;
@@ -5011,13 +5010,16 @@ static ngx_int_t
 ngx_http_upstream_process_transfer_encoding(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset)
 {
-    r->upstream->headers_in.transfer_encoding = h;
+    ngx_http_upstream_t  *u;
+
+    u = r->upstream;
+    u->headers_in.transfer_encoding = h;
 
     if (ngx_strlcasestrn(h->value.data, h->value.data + h->value.len,
                          (u_char *) "chunked", 7 - 1)
         != NULL)
     {
-        r->upstream->headers_in.chunked = 1;
+        u->headers_in.chunked = 1;
     }
 
     return NGX_OK;
@@ -5337,29 +5339,6 @@ ngx_http_upstream_copy_allow_ranges(ngx_http_request_t *r,
 
     return NGX_OK;
 }
-
-
-#if (NGX_HTTP_GZIP)
-
-static ngx_int_t
-ngx_http_upstream_copy_content_encoding(ngx_http_request_t *r,
-    ngx_table_elt_t *h, ngx_uint_t offset)
-{
-    ngx_table_elt_t  *ho;
-
-    ho = ngx_list_push(&r->headers_out.headers);
-    if (ho == NULL) {
-        return NGX_ERROR;
-    }
-
-    *ho = *h;
-
-    r->headers_out.content_encoding = ho;
-
-    return NGX_OK;
-}
-
-#endif
 
 
 static ngx_int_t
