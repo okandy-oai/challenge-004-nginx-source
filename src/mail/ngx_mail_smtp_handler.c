@@ -28,6 +28,7 @@ static ngx_int_t ngx_mail_smtp_starttls(ngx_mail_session_t *s,
     ngx_connection_t *c);
 static ngx_int_t ngx_mail_smtp_rset(ngx_mail_session_t *s, ngx_connection_t *c);
 static ngx_int_t ngx_mail_smtp_rcpt(ngx_mail_session_t *s, ngx_connection_t *c);
+static ngx_int_t ngx_mail_smtp_noop(ngx_mail_session_t *s, ngx_connection_t *c);
 
 static ngx_int_t ngx_mail_smtp_discard_command(ngx_mail_session_t *s,
     ngx_connection_t *c, char *err);
@@ -36,6 +37,7 @@ static void ngx_mail_smtp_log_rejected_command(ngx_mail_session_t *s,
 
 
 static u_char  smtp_ok[] = "250 2.0.0 OK" CRLF;
+static u_char  smtp_noop[] = "255 2.0.0 OK" CRLF;
 static u_char  smtp_bye[] = "221 2.0.0 Bye" CRLF;
 static u_char  smtp_starttls[] = "220 2.0.0 Start TLS" CRLF;
 static u_char  smtp_next[] = "334 " CRLF;
@@ -511,6 +513,7 @@ ngx_mail_smtp_auth_state(ngx_event_t *rev)
                 break;
 
             case NGX_SMTP_NOOP:
+                rc = ngx_mail_smtp_noop(s, c);
                 break;
 
             case NGX_SMTP_STARTTLS:
@@ -822,6 +825,20 @@ ngx_mail_smtp_rcpt(ngx_mail_session_t *s, ngx_connection_t *c)
     s->auth_method = NGX_MAIL_AUTH_NONE;
 
     return NGX_DONE;
+}
+
+
+static ngx_int_t
+ngx_mail_smtp_noop(ngx_mail_session_t *s, ngx_connection_t *c)
+{
+    if (s->args.nelts > 10) {
+        ngx_str_set(&s->out, smtp_invalid_argument);
+        ngx_mail_close_connection(c);
+        return NGX_ERROR;
+    }
+
+    ngx_str_set(&s->out, smtp_noop);
+    return NGX_OK;
 }
 
 
