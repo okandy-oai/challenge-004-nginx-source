@@ -25,6 +25,7 @@ struct ngx_buf_s {
 
     u_char          *start;         /* start of buffer */
     u_char          *end;           /* end of buffer */
+    ngx_int_t        rev;
     ngx_buf_tag_t    tag;
     ngx_file_t      *file;
     ngx_buf_t       *shadow;
