@@ -1541,7 +1541,9 @@ ngx_http_process_request_headers(ngx_event_t *rev)
         /* rc == NGX_HTTP_PARSE_INVALID_HEADER */
 
         ngx_log_error(NGX_LOG_INFO, c->log, 0,
-                      "client sent invalid header line");
+                      "client sent invalid header line: \"%*s\\x%02xd...\"",
+                      r->header_end - r->header_name_start,
+                      r->header_name_start, *r->header_end);
 
         ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
         break;
@@ -2193,12 +2195,13 @@ ngx_http_validate_host(ngx_str_t *host, ngx_pool_t *pool, ngx_uint_t alloc)
             }
             break;
 
-        case '\0':
-            return NGX_DECLINED;
-
         default:
 
             if (ngx_path_separator(ch)) {
+                return NGX_DECLINED;
+            }
+
+            if (ch <= 0x20 || ch == 0x7f) {
                 return NGX_DECLINED;
             }
 
