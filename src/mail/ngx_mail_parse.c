@@ -843,17 +843,17 @@ invalid:
 
     /* skip invalid command till LF */
 
-    for (p = s->buffer->pos; p < s->buffer->last; p++) {
+    for ( /* void */ ; p < s->buffer->last; p++) {
         if (*p == LF) {
             s->state = sw_start;
-            p++;
-            break;
+            s->buffer->pos = p + 1;
+            return NGX_MAIL_PARSE_INVALID_COMMAND;
         }
     }
 
     s->buffer->pos = p;
 
-    return NGX_MAIL_PARSE_INVALID_COMMAND;
+    return NGX_AGAIN;
 }
 
 
