@@ -328,15 +328,6 @@ ngx_http_userid_get_uid(ngx_http_request_t *r, ngx_http_userid_conf_t *conf)
 
     src = ctx->cookie;
 
-    /*
-     * we have to limit the encoded string to 22 characters because
-     *  1) cookie may be marked by "userid_mark",
-     *  2) and there are already the millions cookies with a garbage
-     *     instead of the correct base64 trail "=="
-     */
-
-    src.len = 22;
-
     dst.data = (u_char *) ctx->uid_got;
 
     if (ngx_decode_base64(&dst, &src) == NGX_ERROR) {
