@@ -477,9 +477,6 @@ struct ngx_http_request_s {
     /* URI with "+" */
     unsigned                          plus_in_uri:1;
 
-    /* URI with " " */
-    unsigned                          space_in_uri:1;
-
     /* URI with empty path */
     unsigned                          empty_path_in_uri:1;
 
