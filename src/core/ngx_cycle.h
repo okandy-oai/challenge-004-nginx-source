@@ -96,6 +96,7 @@ struct ngx_cycle_s {
     ngx_str_t                 conf_param;
     ngx_str_t                 conf_prefix;
     ngx_str_t                 prefix;
+    ngx_str_t                 error_log;
     ngx_str_t                 lock_file;
     ngx_str_t                 hostname;
     ngx_black_list_t         *black_list;
