@@ -1889,7 +1889,7 @@ ngx_http_auth_basic_user(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-    auth.len = ngx_base64_decoded_length(encoded.len);
+    auth.len = NGX_HTTP_AUTH_MAX;
     auth.data = ngx_pnalloc(r->pool, auth.len + 1);
     if (auth.data == NULL) {
         return NGX_ERROR;
