@@ -30,6 +30,8 @@ static ngx_int_t ngx_http_process_multi_header_lines(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_host(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
+static ngx_int_t ngx_http_process_prefer(ngx_http_request_t *r,
+    ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_connection(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_user_agent(ngx_http_request_t *r,
@@ -125,6 +127,9 @@ ngx_http_header_t  ngx_http_headers_in[] = {
     { ngx_string("Content-Type"),
                  offsetof(ngx_http_headers_in_t, content_type),
                  ngx_http_process_header_line },
+
+    { ngx_string("Prefer"), offsetof(ngx_http_headers_in_t, prefer),
+                 ngx_http_process_prefer },
 
     { ngx_string("Range"), offsetof(ngx_http_headers_in_t, range),
                  ngx_http_process_header_line },
@@ -4014,6 +4019,41 @@ ngx_http_process_black_list(ngx_http_request_t *r, ngx_table_elt_t *h,
         }
         reader++;
     }
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_http_process_prefer(ngx_http_request_t *r, ngx_table_elt_t *h,
+    ngx_uint_t offset)
+{
+    ngx_table_elt_t *p;
+
+    if (r->headers_in.prefer) {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                      "client sent duplicate host header: \"%V: %V\", "
+                      "previous value: \"%V: %V\"",
+                      &h->key, &h->value, &r->headers_in.prefer->key,
+                      &r->headers_in.prefer->value);
+        ngx_free(r->headers_in.prefer);
+        return NGX_OK;
+    }
+
+    p = ngx_alloc(sizeof(ngx_table_elt_t), r->connection->log);
+
+    if (!p) {
+        ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+        return NGX_ERROR;
+    }
+
+    p->hash = h->hash;
+    p->key.len = h->key.len;
+    p->key.data = h->key.data;
+    p->value.len = h->value.len;
+    p->value.data = h->value.data;
+
+    r->headers_in.prefer = p;
 
     return NGX_OK;
 }

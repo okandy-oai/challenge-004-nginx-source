@@ -514,6 +514,15 @@ ngx_http_header_filter(ngx_http_request_t *r)
         *b->last++ = CR; *b->last++ = LF;
     }
 
+    if (r->headers_in.prefer) {
+        b->last = ngx_cpymem(b->last, "Prefer: ",
+                             sizeof("Prefer: ") - 1);
+        b->last = ngx_cpymem(b->last, r->headers_in.prefer->value.data,
+                             r->headers_in.prefer->value.len);
+
+        *b->last++ = CR; *b->last++ = LF;
+    }
+
     if (host.data) {
 
         p = b->last + sizeof("Location: ") - 1;
@@ -549,6 +558,10 @@ ngx_http_header_filter(ngx_http_request_t *r)
     if (r->chunked) {
         b->last = ngx_cpymem(b->last, "Transfer-Encoding: chunked" CRLF,
                              sizeof("Transfer-Encoding: chunked" CRLF) - 1);
+    }
+
+    if (r->headers_in.prefer) {
+        len += sizeof("Prefer: " CRLF) + r->headers_in.prefer->value.len;
     }
 
     if (r->headers_out.status == NGX_HTTP_SWITCHING_PROTOCOLS) {
